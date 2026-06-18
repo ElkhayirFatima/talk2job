@@ -1,0 +1,153 @@
+version: "3.8"
+
+services:
+  # ──────────────────────────────────────
+  # PostgreSQL Database
+  # ──────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: talk2job-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: fatima_22
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────
+  # Redis (Celery broker/backend)
+  # ──────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: talk2job-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ──────────────────────────────────────
+  # Auth Service (.NET 8)
+  # ──────────────────────────────────────
+  auth-service:
+    build:
+      context: ./backend/talk2job-auth-service
+      dockerfile: Talk2Job.AuthService/dockerfile
+    container_name: talk2job-auth-service
+    restart: unless-stopped
+    ports:
+      - "5106:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__UserDatabase: "Host=postgres;Port=5432;Database=talk2job_userdb;Username=postgres;Password=fatima_22"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ──────────────────────────────────────
+  # Gateway API (.NET 8 + YARP)
+  # ──────────────────────────────────────
+  gateway:
+    build:
+      context: ./backend/talk2job-gateway-api
+      dockerfile: Talk2Job.Gateway/Dockerfile
+    container_name: talk2job-gateway
+    restart: unless-stopped
+    ports:
+      - "5151:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ReverseProxy__Clusters__user-cluster__Destinations__destination1__Address: http://auth-service:8080
+      ReverseProxy__Clusters__matching-cluster__Destinations__destination1__Address: http://matching-service:8000
+    depends_on:
+      - auth-service
+      - matching-service
+
+  # ──────────────────────────────────────
+  # Matching Service (FastAPI)
+  # ──────────────────────────────────────
+  matching-service:
+    build:
+      context: ./backend/talk2job-matching-service
+      dockerfile: dockerfile
+    container_name: talk2job-matching-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:fatima_22@postgres:5432/talk2job
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ──────────────────────────────────────
+  # Celery Worker
+  # ──────────────────────────────────────
+  celery-worker:
+    build:
+      context: ./backend/talk2job-matching-service
+      dockerfile: dockerfile
+    container_name: talk2job-celery-worker
+    restart: unless-stopped
+    command: celery -A app.core.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://postgres:fatima_22@postgres:5432/talk2job
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ──────────────────────────────────────
+  # Celery Beat (scheduler)
+  # ──────────────────────────────────────
+  celery-beat:
+    build:
+      context: ./backend/talk2job-matching-service
+      dockerfile: dockerfile
+    container_name: talk2job-celery-beat
+    restart: unless-stopped
+    command: celery -A app.core.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://postgres:fatima_22@postgres:5432/talk2job
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ──────────────────────────────────────
+  # Frontend (React + Vite → Nginx)
+  # ──────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: talk2job-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - gateway
+
+volumes:
+  postgres_data:
