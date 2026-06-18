@@ -1,0 +1,61 @@
+# --- Python Environment ---
+venv/
+env/
+.venv/
+bin/
+lib/
+develop-eggs/
+dist/
+eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# --- Byte-compiled / optimized / cache ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# --- Environment Variables (CRITICAL: Security) ---
+.env
+.env.local
+.env.*
+# (Never commit your actual secret keys!)
+
+# --- Database & Storage ---
+*.db
+*.sqlite3
+postgres_data/
+alembic/versions/*.pyc
+
+# --- AI Models & Heavy Data ---
+# Since you have LLM and Normalizer modules
+models/
+data/
+*.pkl
+*.bin
+*.h5
+
+# --- IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Docker & Logs ---
+*.log
+docker-compose.override.yml

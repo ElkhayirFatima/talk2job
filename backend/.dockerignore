@@ -1,0 +1,12 @@
+**/.git
+**/.gitignore
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/*.user
+**/*.lock.json
+Dockerfile
+.gitlab-ci.yml
+**/.dockerignore
+**/.env

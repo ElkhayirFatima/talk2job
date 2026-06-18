@@ -1,0 +1,11 @@
+# Ignore Build Folders
+**/bin/
+**/obj/
+
+# User-specific files
+.vs/
+.vscode/
+*.user
+
+# Test results
+TestResults/

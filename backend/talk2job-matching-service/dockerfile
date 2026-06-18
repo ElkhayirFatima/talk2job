@@ -1,0 +1,60 @@
+# Stage 1: Builder
+# We use a full python image to have all build tools (gcc, etc.) available
+FROM python:3.11-slim AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Prevent Python from writing .pyc files and enable unbuffered logging
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies required for building heavy libraries like psycopg2 and numpy
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip and install wheel for faster builds
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+
+# Install dependencies into a local user directory to easily copy them to the final stage
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Download the spaCy model explicitly (it often fails when hidden inside requirements.txt)
+RUN python -m spacy download en_core_web_sm --user
+
+# Stage 2: Final Runtime
+# Use a slim image for the production environment to reduce attack surface and size
+FROM python:3.11-slim AS final
+
+WORKDIR /app
+
+# Install only the runtime system libraries (libpq is needed for PostgreSQL connection)
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only the installed python packages from the builder stage
+COPY --from=builder /root/.local /root/.local
+
+# Update PATH to include the local bin where packages and uvicorn/celery are located
+ENV PATH=/root/.local/bin:$PATH
+
+# Copy the application source code
+COPY . .
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Expose the default FastAPI port
+EXPOSE 8000
+
+# Default command (overridden by docker-compose for workers/beat)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

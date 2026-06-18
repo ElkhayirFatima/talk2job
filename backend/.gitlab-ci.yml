@@ -1,0 +1,54 @@
+variables:
+  # Paths for Auth Service
+  SERVICE_PATH: "Talk2Job.AuthService"
+  TEST_PATH: "Talk2Job.AuthService.Tests"
+  # Docker Image naming
+  IMAGE_TAG_AUTH: $CI_REGISTRY_IMAGE/auth-service:$CI_COMMIT_SHORT_SHA
+  LATEST_AUTH: $CI_REGISTRY_IMAGE/auth-service:latest
+
+stages:
+  - build
+  - test
+  - package
+
+# GLOBAL CACHING for NuGet dependencies
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - .nuget/packages/
+
+build_auth:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  script:
+    - dotnet restore ./$SERVICE_PATH/*.csproj --packages .nuget/packages/
+    - dotnet build ./$SERVICE_PATH/*.csproj -c Release --no-restore
+
+test_auth:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  variables:
+    ConnectionStrings__UserDatabase: $ConnectionStrings__UserDatabase
+    AppSettings__Token: $AppSettings__Token
+    AppSettings__Issuer: $AppSettings__Issuer
+    AppSettings__Audience: $AppSettings__Audience
+    Authentication__Google__ClientId: $Authentication__Google__ClientId
+    Authentication__Google__ClientSecret: $Authentication__Google__ClientSecret
+    Authentication__GitHub__ClientId: $Authentication__GitHub__ClientId
+    Authentication__GitHub__ClientSecret: $Authentication__GitHub__ClientSecret
+    EmailSettings__Password: $EmailSettings__Password
+  script:
+    - dotnet test ./$TEST_PATH/*.csproj -c Release
+
+publish_auth_docker:
+  stage: package
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker build -f ./$SERVICE_PATH/Dockerfile -t $IMAGE_TAG_AUTH -t $LATEST_AUTH .
+    - docker push $IMAGE_TAG_AUTH
+    - docker push $LATEST_AUTH
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

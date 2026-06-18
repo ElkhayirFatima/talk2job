@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Python virtual environment
+venv/
+env/
+.env
+.venv
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Data and Models
+# (Exclude local data/models to keep image small, use volumes instead)
+data/
+models/
+*.db
+*.sqlite3
+
+# IDEs and OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Docker files (No need to copy them inside the container)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Build and logs
+build/
+dist/
+*.log
